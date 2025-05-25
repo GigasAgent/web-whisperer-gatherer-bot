@@ -1,9 +1,8 @@
-
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Session, User, AuthError, Provider } from '@supabase/supabase-js';
+import { Session, User, AuthError, Provider, RealtimeChannel, RealtimeChannelSendResponse } from '@supabase/supabase-js';
 import { cleanupAuthState } from '@/utils/authUtils';
-import { toast } from '@/hooks/use-toast'; // Corrected import path
+import { toast } from '@/hooks/use-toast';
 
 interface AuthContextType {
   session: Session | null;
@@ -12,7 +11,7 @@ interface AuthContextType {
   loading: boolean;
   initialLoading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error: AuthError | null }>;
+  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error: AuthError | null; user?: User | null }>;
   signInWithGitHub: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -43,28 +42,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         fetchProfile(session.user.id);
       }
       setInitialLoading(false);
+    }).catch(error => {
+      console.error("Error getting session:", error);
+      setInitialLoading(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log("Auth event:", _event, session);
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        if (_event === 'SIGNED_IN' || _event === 'USER_UPDATED' || _event === 'TOKEN_REFRESHED') {
-          // Defer profile fetching slightly to avoid race conditions with new user trigger
+        if (_event === 'SIGNED_IN' || _event === 'USER_UPDATED' || _event === 'TOKEN_REFRESHED' || _event === "PASSWORD_RECOVERY") {
+           // Defer profile fetching slightly to avoid race conditions with new user trigger
+          // and to ensure Supabase has fully processed the auth event.
           setTimeout(() => fetchProfile(session.user.id), 100);
         }
       } else {
-        setProfile(null);
+        setProfile(null); // Clear profile if no user
       }
+
       if (_event === 'SIGNED_OUT') {
-        setProfile(null);
+        setProfile(null); // Ensure profile is cleared on sign out
+        // No need to set user/session to null here, as it's handled by onAuthStateChange
       }
       setLoading(false); // Ensure loading is false after auth state changes
     });
 
     return () => {
-      authListener?.unsubscribe();
+      authListener?.subscription?.unsubscribe(); // Corrected: unsubscribe from the subscription object
     };
   }, []);
 
@@ -121,17 +127,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       password,
       options: {
         data: {
-          full_name: fullName || email.split('@')[0], // Pass full_name to be picked up by handle_new_user trigger
+          full_name: fullName || email.split('@')[0], 
         },
       },
     });
+
     if (error) {
       toast({ title: "Sign Up Error", description: error.message, variant: "destructive" });
     } else if (data.user) {
+      // Profile creation is handled by the trigger `on_auth_user_created`.
+      // `fetchProfile` will be called by `onAuthStateChange` listener when `SIGNED_IN` event occurs.
       toast({ title: "Sign Up Successful", description: "Please check your email to verify your account." });
     }
     setLoading(false);
-    return { error };
+    return { error, user: data.user };
   };
 
   const signInWithGitHub = async () => {
@@ -156,18 +165,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signOut = async () => {
     setLoading(true);
-    cleanupAuthState();
-    const { error } = await supabase.auth.signOut({ scope: 'global' });
+    cleanupAuthState(); // Clean local storage first
+    const { error } = await supabase.auth.signOut({ scope: 'global' }); // Attempt global sign out
+    
+    // The onAuthStateChange listener will handle setting user, session, and profile to null.
+    // So explicit null setting here is redundant and can cause race conditions.
+    
     if (error) {
       toast({ title: "Sign Out Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Signed Out", description: "Successfully signed out." });
-      setProfile(null); // Clear profile on sign out
-      setUser(null);
-      setSession(null);
+      // No need to explicitly set user/session/profile to null here,
+      // onAuthStateChange handles it.
+      // window.location.href = '/auth'; // Force redirect and clear state
     }
     setLoading(false);
-    // Redirect handled by ProtectedRoute or page logic
+    // Redirect should be handled by ProtectedRoute or page logic based on auth state.
   };
 
   return (
