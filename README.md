@@ -5,51 +5,68 @@
 
 **URL**: https://lovable.dev/projects/d5f31206-bf3e-4ba3-8b2a-0000971d59e1
 
-## Git Branching Strategy & Environments
+## Git Branching Strategy & Environments (Two-Branch Strategy)
 
-This project uses a Git branching strategy to manage different environments: `dev`, `test`, and `prod`.
+This project uses a simplified two-branch Git strategy to manage different stages of development, using a **single Supabase project**: `main` and `test`.
 
--   **`dev`**: Main development branch. All new features and day-to-day development happen here. Lovable should be set to this branch for active development. Connects to the **Development Supabase project**.
--   **`test`**: Staging/Testing branch. Code from `dev` is merged here for testing before going to production. Connects to the **Test Supabase project**.
--   **`prod`**: Production branch. Contains the stable, live version of the application. Code from `test` is merged here after successful testing. Connects to the **Production Supabase project**.
+-   **`main`**: Main development and production-ready branch. All new features are developed here or in feature branches merged into `main`. Lovable should typically be set to this branch for active development. This branch connects to your Supabase project. Builds from this branch are considered for production.
+-   **`test`**: Staging/Testing branch. Code from `main` is merged here for testing before confirming stability. This branch also connects to the **same Supabase project** as `main`.
 
 ### Environment Configuration
 
-Supabase connection details (URL and Anon Key) are managed per environment. Configuration files are located in `src/config/`:
--   `src/config/env.development.ts`
--   `src/config/env.test.ts`
--   `src/config/env.production.ts`
+Supabase connection details (URL and Anon Key) are managed using environment-specific files in `src/config/`. Since we are using a single Supabase project, these files will initially contain the same credentials but are loaded based on Vite's mode:
+-   `src/config/env.development.ts`: Used by the `main` branch (when running `npm run dev` or `npm run build`).
+-   `src/config/env.test.ts`: Used by the `test` branch (when running Vite in `test` mode, e.g., `npm run build:test`).
 
-**IMPORTANT**: You MUST populate these files with the actual Supabase URL and Anon Key for each of your corresponding Supabase projects. These files are version-controlled to ensure each branch can have its distinct Supabase backend.
+**IMPORTANT**: You MUST populate `src/config/env.development.ts` and `src/config/env.test.ts` with the actual Supabase URL and Anon Key for your Supabase project.
 
-Vite loads the correct configuration based on the mode (`development`, `test`, `production`). See `package.json` for build and preview scripts specific to each mode (e.g., `npm run build:test`, `npm run dev`).
+Vite loads the correct configuration based on the mode (`development`, `test`, `production`). The `production` mode (default for `npm run build`) will use the `development` configuration (from `env.development.ts`), suitable for the `main` branch's production builds.
+
+### `package.json` Script Updates
+
+You'll need to update your `package.json` scripts section to support this two-branch strategy. Replace your existing `scripts` with the following:
+
+```json
+"scripts": {
+  "dev": "vite", // Runs in 'development' mode, uses env.development.ts
+  "build": "vite build", // Runs in 'production' mode, uses env.development.ts via environments.ts logic
+  "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+  "preview": "vite preview", // Runs in 'production' mode, previews the build
+  "build:test": "vite build --mode test", // Runs in 'test' mode, uses env.test.ts
+  "preview:test": "vite preview --mode test" // Runs in 'test' mode, previews the test build
+},
+```
+**Action Required**: Manually update your `package.json` with these scripts.
 
 ### Workflow
 
-1.  **Development**:
-    *   Ensure Lovable is set to the `dev` branch (using the experimental GitHub Branch Switching feature).
-    *   All Lovable commits will go to the `dev` branch.
-    *   Run locally using `npm run dev` (uses development Supabase).
+1.  **Branch Setup (One-time manual setup)**:
+    *   Ensure you have a `main` branch and a `test` branch in your GitHub repository.
+    *   If you have `dev` or `prod` branches from a previous setup, you might want to delete them or rename `dev` to `main`.
+    *   Your `main` branch should contain the latest stable code. Create `test` from `main`.
 
-2.  **Promoting to Test**:
-    *   Create a Pull Request from `dev` to `test`.
+2.  **Development on `main`**:
+    *   Ensure Lovable is set to the `main` branch (using the experimental GitHub Branch Switching feature).
+    *   All Lovable commits will go to the `main` branch.
+    *   Run locally using `npm run dev` (uses `development` Supabase config).
+
+3.  **Promoting to Test**:
+    *   Create a Pull Request from `main` to `test`.
     *   Review and merge.
-    *   Deploy the `test` branch to your testing environment. Test thoroughly.
+    *   Deploy the `test` branch to your testing environment (if any). Test thoroughly.
     *   Build for test using `npm run build:test`.
 
-3.  **Promoting to Production**:
-    *   Create a Pull Request from `test` to `prod`.
-    *   Review and merge.
-    *   Deploy the `prod` branch to your production environment.
-    *   Build for production using `npm run build:prod` (or `npm run build`).
+4.  **"Promoting" to Production (from `main`)**:
+    *   Since `main` is also your production-ready branch, once changes on `main` are stable (optionally after testing via the `test` branch workflow), you can deploy the `main` branch.
+    *   Build for production using `npm run build` (or your CI/CD process for `main`).
 
 ### Switching Branches in Lovable
 
-Use Lovable's experimental GitHub Branch Switching feature to change the active branch Lovable is working on. For active development, ensure it's set to `dev`.
+Use Lovable's experimental GitHub Branch Switching feature to change the active branch Lovable is working on. For active development, ensure it's set to `main`.
 
 ### Supabase CLI and `supabase/config.toml`
 
-The `supabase/config.toml` file is primarily for the Supabase CLI and local development workflows (like `supabase start`, `supabase db diff`). The client-side application (browser) uses the configurations from `src/config/env.*.ts` files. If you need to work with different Supabase projects using the CLI for each environment/branch, you'll need to manage different `supabase/config.toml` contents manually or through scripting outside of this application's client-side code. For instance, you might have `supabase/config.dev.toml`, `supabase/config.test.toml`, etc., and copy the relevant one to `supabase/config.toml` before running CLI commands for a specific environment.
+The `supabase/config.toml` file is primarily for the Supabase CLI and local development workflows. The client-side application uses the configurations from `src/config/env.*.ts` files. Since you are using one Supabase project, your `supabase/config.toml` will point to this single project.
 
 ## How can I edit this code?
 
