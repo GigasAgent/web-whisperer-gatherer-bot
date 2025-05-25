@@ -1,13 +1,15 @@
-
 import React, { useState } from 'react';
 import { questions, Question } from '@/data/questions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea'; // Assuming Textarea is available or similar
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 interface Answers {
   [key: string]: string | string[];
@@ -17,6 +19,8 @@ export const Questionnaire: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [currentAnswer, setCurrentAnswer] = useState('');
+  const { user, loading: authLoading } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentQuestion = questions[currentQuestionIndex];
 
@@ -38,20 +42,22 @@ export const Questionnaire: React.FC = () => {
     }));
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
-      setCurrentAnswer(answers[questions[currentQuestionIndex + 1].key]?.toString() || ''); // Pre-fill if already answered
+      const nextQuestionKey = questions[currentQuestionIndex + 1].key;
+      const nextAnswer = answers[nextQuestionKey] || (answers[nextQuestionKey] === '' ? '' : undefined);
+      setCurrentAnswer(Array.isArray(nextAnswer) ? nextAnswer.join(', ') : nextAnswer?.toString() || '');
     } else {
-      // Finished
-      console.log("Final Answers:", { ...answers, [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion) });
+      handleSubmit();
     }
   };
 
   const handlePrev = () => {
     if (currentQuestionIndex > 0) {
-      // Save current answer before going back
-      setAnswers(prev => ({
-        ...prev,
-        [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion)
-      }));
+      if (currentAnswer.trim() !== '') {
+        setAnswers(prev => ({
+          ...prev,
+          [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion)
+        }));
+      }
       setCurrentQuestionIndex(prev => prev - 1);
       const prevQuestionKey = questions[currentQuestionIndex - 1].key;
       const prevAnswer = answers[prevQuestionKey];
@@ -60,27 +66,52 @@ export const Questionnaire: React.FC = () => {
   };
   
   const handleSubmit = async () => {
+    if (!user) {
+      toast({ title: "Authentication Error", description: "You must be logged in to submit.", variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
     const finalAnswers = { ...answers, [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion) };
-    console.log("Submitting data:", JSON.stringify(finalAnswers, null, 2));
-    // Here you would typically send the data to a backend or webhook
-    // e.g., await fetch('/api/submit-project', { method: 'POST', body: JSON.stringify(finalAnswers) });
-    alert("Project requirements submitted! (Check console for JSON data)");
+    
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([{ 
+          user_id: user.id,
+          requirements_json: finalAnswers,
+          status: 'submitted'
+        }])
+        .select();
+
+      if (error) {
+        console.error("Error submitting project requirements:", error);
+        toast({ title: "Submission Error", description: `Failed to submit: ${error.message}`, variant: "destructive" });
+      } else {
+        console.log("Project requirements submitted:", data);
+        toast({ title: "Success!", description: "Project requirements submitted successfully." });
+        // Optionally, redirect or clear form
+        // setAnswers({});
+        // setCurrentAnswer('');
+        // setCurrentQuestionIndex(0);
+      }
+    } catch (e) {
+      console.error("Unexpected error submitting:", e);
+      toast({ title: "Submission Error", description: "An unexpected error occurred.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const progressPercentage = ((currentQuestionIndex + 1) / questions.length) * 100;
-
-  if (currentQuestionIndex >= questions.length) {
-    // This state is reached if logic error, submit should happen on last question.
-    // For safety, handle display of final answers if somehow past last question.
-    // Correct flow: on last question, 'Next' becomes 'Finish' or similar.
-    // The handleNext already logs when finished. Let's refine the "finished" state.
-    // A better way: after last question's "Next" is clicked, show summary.
-    // The current logic: state updates, then if index < length-1, go next, else log.
-    // This means the UI for the summary/submit is needed after the last question.
-    // For now, the submit button appears on the last question.
-  }
-
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
+
+  if (authLoading) {
+    return (
+      <Card className="w-full max-w-2xl bg-card shadow-xl shadow-neon-green/30 border border-neon-green/50 flex items-center justify-center p-10">
+        <Loader2 className="h-8 w-8 animate-spin text-neon-green" />
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full max-w-2xl bg-card shadow-xl shadow-neon-green/30 border border-neon-green/50">
@@ -109,6 +140,7 @@ export const Questionnaire: React.FC = () => {
               placeholder={`Your answer for ${currentQuestion.label.toLowerCase()}`}
               className="min-h-[100px] bg-input border-neon-green/50 focus:ring-neon-green focus:border-neon-green"
               rows={4}
+              disabled={isSubmitting}
             />
           ) : (
             <Input
@@ -118,6 +150,7 @@ export const Questionnaire: React.FC = () => {
               onChange={handleInputChange}
               placeholder={`Your answer for ${currentQuestion.label.toLowerCase()}`}
               className="bg-input border-neon-green/50 focus:ring-neon-green focus:border-neon-green"
+              disabled={isSubmitting}
             />
           )}
         </div>
@@ -126,7 +159,7 @@ export const Questionnaire: React.FC = () => {
         <Button
           variant="outline"
           onClick={handlePrev}
-          disabled={currentQuestionIndex === 0}
+          disabled={currentQuestionIndex === 0 || isSubmitting}
           className="border-neon-green text-neon-green hover:bg-neon-green/10"
         >
           <ArrowLeft className="mr-2 h-4 w-4" /> Previous
@@ -134,13 +167,16 @@ export const Questionnaire: React.FC = () => {
         {isLastQuestion ? (
           <Button
             onClick={handleSubmit}
+            disabled={isSubmitting || !user}
             className="bg-neon-green text-primary-foreground hover:bg-neon-green-darker"
           >
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Submit Project <CheckCircle2 className="ml-2 h-4 w-4" />
           </Button>
         ) : (
           <Button
             onClick={handleNext}
+            disabled={isSubmitting}
             className="bg-neon-green text-primary-foreground hover:bg-neon-green-darker"
           >
             Next <ArrowRight className="ml-2 h-4 w-4" />
