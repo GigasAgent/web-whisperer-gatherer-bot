@@ -1,7 +1,8 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
-	darkMode: ["class"],
+	darkMode: ["class"], // Ensure 'class' strategy is enabled
 	content: [
 		"./pages/**/*.{ts,tsx}",
 		"./components/**/*.{ts,tsx}",
@@ -61,7 +62,13 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+        // Custom color inspired by the image
+        'neon-green': {
+          DEFAULT: 'hsl(130, 80%, 55%)', // A vibrant green
+          lighter: 'hsl(130, 80%, 65%)',
+          darker: 'hsl(130, 80%, 45%)',
+        }
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
@@ -89,8 +96,12 @@ export default {
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out'
-			}
+			},
+      boxShadow: {
+        'glow-green': '0 0 15px 0px hsl(var(--neon-green-hsl, 130 80% 55%) / 0.5)',
+      }
 		}
 	},
 	plugins: [require("tailwindcss-animate")],
 } satisfies Config;
+
