@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal, Info } from "lucide-react";
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -95,28 +94,33 @@ export const Questionnaire: React.FC = () => {
     const finalAnswers = { ...answers, [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion) };
     
     let submissionSuccessful = false;
+    let newProjectId: string | number | null = null; // To store the ID of the created project
 
     try {
       const { data, error } = await supabase
         .from('projects')
         .insert([{ 
           user_id: user.id,
-          requirements_json: finalAnswers,
+          requirements_json: finalAnswers, 
           status: 'submitted'
         }])
-        .select();
+        .select('id') // Select only the ID of the inserted row(s)
+        .single(); // Expecting a single row to be inserted and returned
 
       if (error) {
         console.error("Error submitting project requirements to Supabase:", error);
         toast({ title: "Submission Error (Supabase)", description: `Failed to submit: ${error.message}`, variant: "destructive" });
       } else {
-        console.log("Project requirements submitted to Supabase:", data);
+        console.log("Project requirements submitted to Supabase, response data:", data);
+        if (data && data.id) {
+            newProjectId = data.id; // Correctly get the ID from the single returned object
+            console.log("New project ID from Supabase:", newProjectId);
+        } else {
+            console.warn("Supabase insert succeeded but returned no data or ID.");
+            // This case should ideally not happen if .single() succeeds without error
+        }
         toast({ title: "Success!", description: "Project requirements submitted successfully to database." });
-        submissionSuccessful = true; // Mark as successful to proceed to n8n
-        // Optionally, redirect or clear form
-        // setAnswers({});
-        // setCurrentAnswer('');
-        // setCurrentQuestionIndex(0);
+        submissionSuccessful = true;
       }
     } catch (e) {
       console.error("Unexpected error submitting to Supabase:", e);
@@ -131,12 +135,10 @@ export const Questionnaire: React.FC = () => {
           userFullName: profile?.full_name || 'N/A',
           submissionTimestamp: new Date().toISOString(),
           projectRequirements: finalAnswers,
-          supabaseProjectId: supabase.from('projects').select().single() // This is illustrative, actual ID comes from insert response
+          supabaseProjectId: newProjectId // Use the ID obtained from the Supabase insert response
         };
-        // If you have the ID from the Supabase insert response (data[0].id), use it.
-        // For now, this is a placeholder to show what you might want to send.
 
-        console.log("Sending to n8n webhook:", n8nWebhookUrl, webhookPayload);
+        console.log("Sending to n8n webhook:", n8nWebhookUrl, JSON.stringify(webhookPayload, null, 2));
         
         const response = await fetch(n8nWebhookUrl, {
           method: 'POST',
@@ -147,17 +149,17 @@ export const Questionnaire: React.FC = () => {
         });
 
         if (response.ok) {
-          const responseData = await response.json();
+          const responseData = await response.json().catch(() => ({})); // Catch if response is not JSON
           console.log("Successfully sent data to n8n webhook:", responseData);
           toast({ title: "Webhook Success", description: "Data sent to n8n successfully." });
         } else {
-          const errorData = await response.text();
-          console.error("Error sending data to n8n webhook:", response.status, errorData);
-          toast({ title: "Webhook Error", description: `Failed to send data to n8n: ${response.status} - ${errorData.substring(0,100)}`, variant: "destructive" });
+          const errorText = await response.text().catch(() => "Could not retrieve error details.");
+          console.error("Error sending data to n8n webhook:", response.status, response.statusText, errorText);
+          toast({ title: "Webhook Error", description: `Failed to send data to n8n: ${response.status} ${response.statusText}. Details: ${errorText.substring(0,100)}`, variant: "destructive" });
         }
       } catch (e: any) {
         console.error("Error calling n8n webhook:", e);
-        toast({ title: "Webhook Call Error", description: `An error occurred while calling n8n webhook: ${e.message}`, variant: "destructive" });
+        toast({ title: "Webhook Call Error", description: `An error occurred while calling n8n webhook: ${e.message ? e.message : 'Unknown error'}.`, variant: "destructive" });
       }
     } else if (n8nWebhookUrl.trim() && !submissionSuccessful) {
       toast({ title: "Webhook Skipped", description: "Data not sent to n8n due to prior submission error.", variant: "default" });
@@ -173,7 +175,8 @@ export const Questionnaire: React.FC = () => {
     } catch (_) {
       return false;  
     }
-    return url.protocol === "http:" || url.protocol === "https:" || url.protocol.startsWith("https+"); // Allow for n8n test webhooks like https+n8n://...
+    // Allow http, https, and n8n's typical https+n8n test webhook URLs
+    return url.protocol === "http:" || url.protocol === "https:" || url.protocol.startsWith("https+");
   };
 
   const progressPercentage = ((currentQuestionIndex + 1) / questions.length) * 100;
@@ -278,7 +281,7 @@ export const Questionnaire: React.FC = () => {
             className="bg-neon-green text-primary-foreground hover:bg-neon-green-darker"
           >
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Submit Project <Zap className="ml-2 h-4 w-4" /> {/* Changed icon to Zap for n8n integration hint */}
+            Submit Project <Zap className="ml-2 h-4 w-4" />
           </Button>
         ) : (
           <Button
