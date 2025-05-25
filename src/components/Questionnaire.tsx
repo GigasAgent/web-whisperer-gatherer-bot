@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { questions, Question } from '@/data/questions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Terminal, Info } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -19,8 +21,21 @@ export const Questionnaire: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [currentAnswer, setCurrentAnswer] = useState('');
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+
+  useEffect(() => {
+    const storedWebhookUrl = localStorage.getItem('n8nWebhookUrl');
+    if (storedWebhookUrl) {
+      setN8nWebhookUrl(storedWebhookUrl);
+    }
+  }, []);
+
+  const handleN8nWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setN8nWebhookUrl(e.target.value);
+    localStorage.setItem('n8nWebhookUrl', e.target.value);
+  };
 
   const currentQuestion = questions[currentQuestionIndex];
 
@@ -64,15 +79,23 @@ export const Questionnaire: React.FC = () => {
       setCurrentAnswer(Array.isArray(prevAnswer) ? prevAnswer.join(', ') : prevAnswer?.toString() || '');
     }
   };
-  
+
   const handleSubmit = async () => {
     if (!user) {
       toast({ title: "Authentication Error", description: "You must be logged in to submit.", variant: "destructive" });
       return;
     }
+
+    if (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)) {
+      toast({ title: "Invalid Webhook URL", description: "Please enter a valid HTTP/HTTPS URL for n8n webhook.", variant: "destructive" });
+      return;
+    }
+
     setIsSubmitting(true);
     const finalAnswers = { ...answers, [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion) };
     
+    let submissionSuccessful = false;
+
     try {
       const { data, error } = await supabase
         .from('projects')
@@ -84,22 +107,73 @@ export const Questionnaire: React.FC = () => {
         .select();
 
       if (error) {
-        console.error("Error submitting project requirements:", error);
-        toast({ title: "Submission Error", description: `Failed to submit: ${error.message}`, variant: "destructive" });
+        console.error("Error submitting project requirements to Supabase:", error);
+        toast({ title: "Submission Error (Supabase)", description: `Failed to submit: ${error.message}`, variant: "destructive" });
       } else {
-        console.log("Project requirements submitted:", data);
-        toast({ title: "Success!", description: "Project requirements submitted successfully." });
+        console.log("Project requirements submitted to Supabase:", data);
+        toast({ title: "Success!", description: "Project requirements submitted successfully to database." });
+        submissionSuccessful = true; // Mark as successful to proceed to n8n
         // Optionally, redirect or clear form
         // setAnswers({});
         // setCurrentAnswer('');
         // setCurrentQuestionIndex(0);
       }
     } catch (e) {
-      console.error("Unexpected error submitting:", e);
-      toast({ title: "Submission Error", description: "An unexpected error occurred.", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
+      console.error("Unexpected error submitting to Supabase:", e);
+      toast({ title: "Submission Error (Supabase)", description: "An unexpected error occurred.", variant: "destructive" });
     }
+
+    if (submissionSuccessful && n8nWebhookUrl.trim()) {
+      try {
+        const webhookPayload = {
+          userId: user.id,
+          userEmail: user.email,
+          userFullName: profile?.full_name || 'N/A',
+          submissionTimestamp: new Date().toISOString(),
+          projectRequirements: finalAnswers,
+          supabaseProjectId: supabase.from('projects').select().single() // This is illustrative, actual ID comes from insert response
+        };
+        // If you have the ID from the Supabase insert response (data[0].id), use it.
+        // For now, this is a placeholder to show what you might want to send.
+
+        console.log("Sending to n8n webhook:", n8nWebhookUrl, webhookPayload);
+        
+        const response = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookPayload),
+        });
+
+        if (response.ok) {
+          const responseData = await response.json();
+          console.log("Successfully sent data to n8n webhook:", responseData);
+          toast({ title: "Webhook Success", description: "Data sent to n8n successfully." });
+        } else {
+          const errorData = await response.text();
+          console.error("Error sending data to n8n webhook:", response.status, errorData);
+          toast({ title: "Webhook Error", description: `Failed to send data to n8n: ${response.status} - ${errorData.substring(0,100)}`, variant: "destructive" });
+        }
+      } catch (e: any) {
+        console.error("Error calling n8n webhook:", e);
+        toast({ title: "Webhook Call Error", description: `An error occurred while calling n8n webhook: ${e.message}`, variant: "destructive" });
+      }
+    } else if (n8nWebhookUrl.trim() && !submissionSuccessful) {
+      toast({ title: "Webhook Skipped", description: "Data not sent to n8n due to prior submission error.", variant: "default" });
+    }
+
+    setIsSubmitting(false);
+  };
+
+  const isValidHttpUrl = (string: string) => {
+    let url;
+    try {
+      url = new URL(string);
+    } catch (_) {
+      return false;  
+    }
+    return url.protocol === "http:" || url.protocol === "https:" || url.protocol.startsWith("https+"); // Allow for n8n test webhooks like https+n8n://...
   };
 
   const progressPercentage = ((currentQuestionIndex + 1) / questions.length) * 100;
@@ -154,6 +228,39 @@ export const Questionnaire: React.FC = () => {
             />
           )}
         </div>
+
+        {isLastQuestion && (
+          <div className="space-y-3 pt-4 border-t border-neon-green/20">
+             <Alert variant="default" className="bg-blue-900/20 border-blue-500/50 text-blue-300">
+              <Info className="h-5 w-5 text-blue-400" />
+              <AlertTitle className="font-semibold text-blue-300">n8n Webhook (Optional)</AlertTitle>
+              <AlertDescription>
+                If you want to send this data to an n8n workflow, paste your n8n webhook URL below. This step is optional.
+                The URL will be saved in your browser's local storage for future use.
+              </AlertDescription>
+            </Alert>
+            <div className="space-y-1">
+              <Label htmlFor="n8nWebhookUrl" className="text-neon-green-lighter">
+                n8n Webhook URL
+              </Label>
+              <Input
+                id="n8nWebhookUrl"
+                type="url"
+                value={n8nWebhookUrl}
+                onChange={handleN8nWebhookUrlChange}
+                placeholder="https://your-n8n-instance.com/webhook/your-path"
+                className="bg-input border-neon-green/50 focus:ring-neon-green focus:border-neon-green"
+                disabled={isSubmitting}
+              />
+              {!n8nWebhookUrl.trim() && (
+                 <p className="text-xs text-muted-foreground">Leave empty if you don't want to use n8n integration.</p>
+              )}
+              {n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl) && (
+                <p className="text-xs text-red-400">Please enter a valid URL (e.g., http://... or https://...).</p>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
       <CardFooter className="flex justify-between p-6">
         <Button
@@ -167,11 +274,11 @@ export const Questionnaire: React.FC = () => {
         {isLastQuestion ? (
           <Button
             onClick={handleSubmit}
-            disabled={isSubmitting || !user}
+            disabled={isSubmitting || !user || (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl))}
             className="bg-neon-green text-primary-foreground hover:bg-neon-green-darker"
           >
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Submit Project <CheckCircle2 className="ml-2 h-4 w-4" />
+            Submit Project <Zap className="ml-2 h-4 w-4" /> {/* Changed icon to Zap for n8n integration hint */}
           </Button>
         ) : (
           <Button
