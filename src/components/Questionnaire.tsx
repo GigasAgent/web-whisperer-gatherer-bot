@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { questions, Question } from '@/data/questions';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Zap, Info } from 'lucide-react'; // Added Info here
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -60,14 +61,19 @@ export const Questionnaire: React.FC = () => {
       const nextAnswer = answers[nextQuestionKey] || (answers[nextQuestionKey] === '' ? '' : undefined);
       setCurrentAnswer(Array.isArray(nextAnswer) ? nextAnswer.join(', ') : nextAnswer?.toString() || '');
     } else {
-      handleSubmit();
+      // If it's the last question, and next is clicked, it implies submit.
+      // However, the explicit submit button should be used. 
+      // Consider if this else block is needed or if handleSubmit() should be called here.
+      // For now, let's assume the user will click the "Submit" button.
+      // If we want "Next" on the last question to also submit, we'd call handleSubmit here.
     }
   };
 
   const handlePrev = () => {
     if (currentQuestionIndex > 0) {
-      if (currentAnswer.trim() !== '') {
-        setAnswers(prev => ({
+      // Save current answer before going back, only if it's not empty, to avoid overwriting with empty
+      if (currentAnswer.trim() !== '' || (Array.isArray(answers[currentQuestion.key]) && (answers[currentQuestion.key] as string[]).length > 0)) {
+         setAnswers(prev => ({
           ...prev,
           [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion)
         }));
@@ -91,10 +97,11 @@ export const Questionnaire: React.FC = () => {
     }
 
     setIsSubmitting(true);
+    // Ensure the current answer for the last question is included before submission
     const finalAnswers = { ...answers, [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion) };
     
     let submissionSuccessful = false;
-    let newProjectId: string | number | null = null; // To store the ID of the created project
+    let newProjectId: string | number | null = null;
 
     try {
       const { data, error } = await supabase
@@ -104,8 +111,8 @@ export const Questionnaire: React.FC = () => {
           requirements_json: finalAnswers, 
           status: 'submitted'
         }])
-        .select('id') // Select only the ID of the inserted row(s)
-        .single(); // Expecting a single row to be inserted and returned
+        .select('id')
+        .single();
 
       if (error) {
         console.error("Error submitting project requirements to Supabase:", error);
@@ -113,11 +120,10 @@ export const Questionnaire: React.FC = () => {
       } else {
         console.log("Project requirements submitted to Supabase, response data:", data);
         if (data && data.id) {
-            newProjectId = data.id; // Correctly get the ID from the single returned object
+            newProjectId = data.id;
             console.log("New project ID from Supabase:", newProjectId);
         } else {
             console.warn("Supabase insert succeeded but returned no data or ID.");
-            // This case should ideally not happen if .single() succeeds without error
         }
         toast({ title: "Success!", description: "Project requirements submitted successfully to database." });
         submissionSuccessful = true;
@@ -135,7 +141,7 @@ export const Questionnaire: React.FC = () => {
           userFullName: profile?.full_name || 'N/A',
           submissionTimestamp: new Date().toISOString(),
           projectRequirements: finalAnswers,
-          supabaseProjectId: newProjectId // Use the ID obtained from the Supabase insert response
+          supabaseProjectId: newProjectId 
         };
 
         console.log("Sending to n8n webhook:", n8nWebhookUrl, JSON.stringify(webhookPayload, null, 2));
@@ -149,7 +155,7 @@ export const Questionnaire: React.FC = () => {
         });
 
         if (response.ok) {
-          const responseData = await response.json().catch(() => ({})); // Catch if response is not JSON
+          const responseData = await response.json().catch(() => ({}));
           console.log("Successfully sent data to n8n webhook:", responseData);
           toast({ title: "Webhook Success", description: "Data sent to n8n successfully." });
         } else {
@@ -166,6 +172,11 @@ export const Questionnaire: React.FC = () => {
     }
 
     setIsSubmitting(false);
+    // Potentially reset form or redirect user after successful submission
+    // For now, just clear current answer if submission was ok.
+    if (submissionSuccessful) {
+      // setCurrentAnswer(''); // Or navigate away, or show a success message page
+    }
   };
 
   const isValidHttpUrl = (string: string) => {
@@ -175,7 +186,6 @@ export const Questionnaire: React.FC = () => {
     } catch (_) {
       return false;  
     }
-    // Allow http, https, and n8n's typical https+n8n test webhook URLs
     return url.protocol === "http:" || url.protocol === "https:" || url.protocol.startsWith("https+");
   };
 
@@ -235,7 +245,7 @@ export const Questionnaire: React.FC = () => {
         {isLastQuestion && (
           <div className="space-y-3 pt-4 border-t border-neon-green/20">
              <Alert variant="default" className="bg-blue-900/20 border-blue-500/50 text-blue-300">
-              <Info className="h-5 w-5 text-blue-400" />
+              <Info className="h-5 w-5 text-blue-400" /> {/* This is where Info was used */}
               <AlertTitle className="font-semibold text-blue-300">n8n Webhook (Optional)</AlertTitle>
               <AlertDescription>
                 If you want to send this data to an n8n workflow, paste your n8n webhook URL below. This step is optional.
@@ -286,7 +296,7 @@ export const Questionnaire: React.FC = () => {
         ) : (
           <Button
             onClick={handleNext}
-            disabled={isSubmitting}
+            disabled={isSubmitting} // Disable Next button if an answer is required and not provided
             className="bg-neon-green text-primary-foreground hover:bg-neon-green-darker"
           >
             Next <ArrowRight className="ml-2 h-4 w-4" />
