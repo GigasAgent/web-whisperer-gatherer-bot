@@ -16,7 +16,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-interface Profile {
+export interface Profile {
   id: string;
   full_name?: string;
   avatar_url?: string;

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { questions } from '@/data/questions';
 
 import { useQuestionnaire } from '@/hooks/useQuestionnaire';
 import { QuestionDisplay } from './QuestionDisplay';
@@ -125,7 +125,7 @@ export const Questionnaire: React.FC = () => {
         </CardTitle>
         <Progress value={progressPercentage} className="w-full mt-2 [&>div]:bg-neon-green" />
         <p className="text-sm text-muted-foreground text-center pt-2">
-          Question {currentQuestionIndex + 1} of {currentQuestion ? questions.length : '...'}
+          Question {currentQuestionIndex + 1} of {questions.length}
         </p>
       </CardHeader>
       <CardContent className="space-y-6 p-6">
