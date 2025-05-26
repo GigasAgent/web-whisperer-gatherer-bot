@@ -64,13 +64,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (_event === 'SIGNED_OUT') {
         setProfile(null); // Ensure profile is cleared on sign out
-        // No need to set user/session to null here, as it's handled by onAuthStateChange
       }
-      setLoading(false); // Ensure loading is false after auth state changes
+      setLoading(false);
     });
 
     return () => {
-      authListener?.subscription?.unsubscribe(); // Corrected: unsubscribe from the subscription object
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
@@ -129,14 +128,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         data: {
           full_name: fullName || email.split('@')[0], 
         },
+        emailRedirectTo: window.location.origin, // Explicitly set redirect URL
       },
     });
 
     if (error) {
       toast({ title: "Sign Up Error", description: error.message, variant: "destructive" });
     } else if (data.user) {
-      // Profile creation is handled by the trigger `on_auth_user_created`.
-      // `fetchProfile` will be called by `onAuthStateChange` listener when `SIGNED_IN` event occurs.
       toast({ title: "Sign Up Successful", description: "Please check your email to verify your account." });
     }
     setLoading(false);
