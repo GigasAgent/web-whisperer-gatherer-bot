@@ -9,6 +9,74 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_logs: {
+        Row: {
+          id: string
+          input: string
+          response: string
+          session_id: string
+          timestamp: string | null
+        }
+        Insert: {
+          id?: string
+          input: string
+          response: string
+          session_id: string
+          timestamp?: string | null
+        }
+        Update: {
+          id?: string
+          input?: string
+          response?: string
+          session_id?: string
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
+      chat_history: {
+        Row: {
+          agent_role: string
+          created_at: string
+          id: string
+          message_content: string
+          message_order: number
+          message_role: Database["public"]["Enums"]["message_role_enum"]
+          metadata: Json | null
+          project_id: number
+          user_id: string
+        }
+        Insert: {
+          agent_role: string
+          created_at?: string
+          id?: string
+          message_content: string
+          message_order: number
+          message_role: Database["public"]["Enums"]["message_role_enum"]
+          metadata?: Json | null
+          project_id: number
+          user_id: string
+        }
+        Update: {
+          agent_role?: string
+          created_at?: string
+          id?: string
+          message_content?: string
+          message_order?: number
+          message_role?: Database["public"]["Enums"]["message_role_enum"]
+          metadata?: Json | null
+          project_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_project"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -62,7 +130,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      message_role_enum: "system" | "user" | "assistant"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -177,6 +245,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      message_role_enum: ["system", "user", "assistant"],
+    },
   },
 } as const

@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { questions, Question } from '@/data/questions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Zap, Info } from 'lucide-react'; // Added Info here
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Zap, Info } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -18,6 +18,7 @@ interface Answers {
 }
 
 export const Questionnaire: React.FC = () => {
+  const navigate = useNavigate();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [currentAnswer, setCurrentAnswer] = useState('');
@@ -97,7 +98,6 @@ export const Questionnaire: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    // Ensure the current answer for the last question is included before submission
     const finalAnswers = { ...answers, [currentQuestion.key]: processAnswer(currentAnswer, currentQuestion) };
     
     let submissionSuccessful = false;
@@ -158,25 +158,25 @@ export const Questionnaire: React.FC = () => {
           const responseData = await response.json().catch(() => ({}));
           console.log("Successfully sent data to n8n webhook:", responseData);
           toast({ title: "Webhook Success", description: "Data sent to n8n successfully." });
+          navigate('/project-output', { state: { projectData: finalAnswers } });
         } else {
           const errorText = await response.text().catch(() => "Could not retrieve error details.");
           console.error("Error sending data to n8n webhook:", response.status, response.statusText, errorText);
           toast({ title: "Webhook Error", description: `Failed to send data to n8n: ${response.status} ${response.statusText}. Details: ${errorText.substring(0,100)}`, variant: "destructive" });
+          navigate('/project-output', { state: { projectData: finalAnswers } });
         }
       } catch (e: any) {
         console.error("Error calling n8n webhook:", e);
         toast({ title: "Webhook Call Error", description: `An error occurred while calling n8n webhook: ${e.message ? e.message : 'Unknown error'}.`, variant: "destructive" });
+        navigate('/project-output', { state: { projectData: finalAnswers } });
       }
+    } else if (submissionSuccessful) { // No n8n URL or it was skipped
+        navigate('/project-output', { state: { projectData: finalAnswers } });
     } else if (n8nWebhookUrl.trim() && !submissionSuccessful) {
       toast({ title: "Webhook Skipped", description: "Data not sent to n8n due to prior submission error.", variant: "default" });
     }
 
     setIsSubmitting(false);
-    // Potentially reset form or redirect user after successful submission
-    // For now, just clear current answer if submission was ok.
-    if (submissionSuccessful) {
-      // setCurrentAnswer(''); // Or navigate away, or show a success message page
-    }
   };
 
   const isValidHttpUrl = (string: string) => {
@@ -245,7 +245,7 @@ export const Questionnaire: React.FC = () => {
         {isLastQuestion && (
           <div className="space-y-3 pt-4 border-t border-neon-green/20">
              <Alert variant="default" className="bg-blue-900/20 border-blue-500/50 text-blue-300">
-              <Info className="h-5 w-5 text-blue-400" /> {/* This is where Info was used */}
+              <Info className="h-5 w-5 text-blue-400" />
               <AlertTitle className="font-semibold text-blue-300">n8n Webhook (Optional)</AlertTitle>
               <AlertDescription>
                 If you want to send this data to an n8n workflow, paste your n8n webhook URL below. This step is optional.
@@ -296,7 +296,7 @@ export const Questionnaire: React.FC = () => {
         ) : (
           <Button
             onClick={handleNext}
-            disabled={isSubmitting} // Disable Next button if an answer is required and not provided
+            disabled={isSubmitting} 
             className="bg-neon-green text-primary-foreground hover:bg-neon-green-darker"
           >
             Next <ArrowRight className="ml-2 h-4 w-4" />
