@@ -10,15 +10,15 @@ import { questions } from '@/data/questions';
 
 import { useQuestionnaire } from '@/hooks/useQuestionnaire';
 import { QuestionDisplay } from './QuestionDisplay';
-// import { N8nWebhookInput } from './N8nWebhookInput'; // Commented out
+import { N8nWebhookInput } from './N8nWebhookInput'; // Uncommented
 import { QuestionNavigation } from './QuestionNavigation';
-import { submitToSupabase } from '@/services/submissionService'; // Removed: callN8nWebhook
+import { submitToSupabase, callN8nWebhook } from '@/services/submissionService'; // Added callN8nWebhook
 
 export const Questionnaire: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile, loading: authLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // const [n8nWebhookUrl, setN8nWebhookUrl] = useState(''); // Commented out
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState(''); // Uncommented
 
   const {
     currentQuestionIndex,
@@ -32,27 +32,28 @@ export const Questionnaire: React.FC = () => {
     getFinalAnswers,
   } = useQuestionnaire();
 
-  // useEffect(() => { // Commented out n8n webhook URL loading
-  //   const storedWebhookUrl = localStorage.getItem('n8nWebhookUrl');
-  //   if (storedWebhookUrl) {
-  //     setN8nWebhookUrl(storedWebhookUrl);
-  //   }
-  // }, []);
+  useEffect(() => { // Uncommented n8n webhook URL loading
+    const storedWebhookUrl = localStorage.getItem('n8nWebhookUrl');
+    if (storedWebhookUrl) {
+      setN8nWebhookUrl(storedWebhookUrl);
+    }
+  }, []);
 
-  // const handleN8nWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => { // Commented out
-  //   setN8nWebhookUrl(e.target.value);
-  //   localStorage.setItem('n8nWebhookUrl', e.target.value);
-  // };
+  const handleN8nWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => { // Uncommented
+    setN8nWebhookUrl(e.target.value);
+    localStorage.setItem('n8nWebhookUrl', e.target.value);
+  };
   
-  // const isValidHttpUrl = (string: string) => { // Commented out
-  //   let url;
-  //   try {
-  //     url = new URL(string);
-  //   } catch (_) {
-  //     return false;
-  //   }
-  //   return url.protocol === "http:" || url.protocol === "https:" || url.protocol.startsWith("https+");
-  // };
+  const isValidHttpUrl = (string: string) => { // Uncommented
+    let url;
+    try {
+      url = new URL(string);
+    } catch (_) {
+      return false;
+    }
+    // Allow http, https, and common n8n webhook protocols like https+.*
+    return url.protocol === "http:" || url.protocol === "https:" || (typeof url.protocol === 'string' && url.protocol.startsWith("https+"));
+  };
 
   const handleSubmit = async () => {
     if (!user) {
@@ -60,31 +61,44 @@ export const Questionnaire: React.FC = () => {
       return;
     }
 
-    // if (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)) { // Commented out n8n validation
-    //   toast({ title: "Invalid Webhook URL", description: "Please enter a valid HTTP/HTTPS URL for n8n webhook.", variant: "destructive" });
-    //   return;
-    // }
+    if (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)) { // Added n8n validation
+      toast({ title: "Invalid Webhook URL", description: "Please enter a valid HTTP/HTTPS URL for n8n webhook.", variant: "destructive" });
+      return;
+    }
 
     setIsSubmitting(true);
     const finalAnswers = getFinalAnswers();
-    
-    // let submissionSuccessful = false; // Simplified logic
-    // let newProjectId: string | number | null | undefined = null; // Simplified logic
+    let newProjectId: string | number | null | undefined = null;
 
     const supabaseResult = await submitToSupabase(user.id, finalAnswers);
 
     if (supabaseResult.error || !supabaseResult.data?.id) {
-      toast({ title: "Submission Error (Supabase)", description: `Failed to submit: ${supabaseResult.error?.message || 'Unknown error'}`, variant: "destructive" });
-    } else {
-      // newProjectId = supabaseResult.newProjectId; // Simplified logic
-      toast({ title: "Success!", description: "Project requirements submitted successfully to database." });
-      // submissionSuccessful = true; // Simplified logic
-      navigate('/project-output', { state: { projectData: finalAnswers, projectId: supabaseResult.newProjectId } }); // Navigate directly
+      toast({ title: "Submission Error (Supabase)", description: `Failed to submit to database: ${supabaseResult.error?.message || 'Unknown error'}`, variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+    
+    newProjectId = supabaseResult.newProjectId;
+    toast({ title: "Success!", description: "Project requirements submitted successfully to database." });
+
+    if (n8nWebhookUrl.trim() && isValidHttpUrl(n8nWebhookUrl)) {
+      toast({ title: "Processing n8n", description: "Sending data to n8n webhook..." });
+      const n8nResult = await callN8nWebhook(
+        n8nWebhookUrl,
+        user.id,
+        user.email,
+        profile,
+        finalAnswers,
+        newProjectId
+      );
+      if (n8nResult.success) {
+        toast({ title: "n8n Success", description: "Data successfully sent to n8n webhook." });
+      } else {
+        toast({ title: "n8n Error", description: `Failed to send data to n8n: ${n8nResult.errorText || 'Unknown error'}`, variant: "destructive" });
+      }
     }
 
-    // Code related to n8n webhook call and subsequent navigation has been removed / simplified.
-    // The navigation now happens directly after successful Supabase submission.
-
+    navigate('/project-output', { state: { projectData: finalAnswers, projectId: newProjectId } });
     setIsSubmitting(false);
   };
 
@@ -97,8 +111,7 @@ export const Questionnaire: React.FC = () => {
     );
   }
 
-  // const disableSubmitButton = !user || (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)); // Simplified disable logic
-  const disableSubmitButton = !user; 
+  const disableSubmitButton = !user || (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)); // Updated disable logic
 
   return (
     <Card className="w-full max-w-2xl bg-card shadow-xl shadow-neon-green/30 border border-neon-green/50">
@@ -120,14 +133,14 @@ export const Questionnaire: React.FC = () => {
             isSubmitting={isSubmitting}
           />
         )}
-        {/* {isLastQuestion && currentQuestion && ( // Commented out N8nWebhookInput rendering
+        {isLastQuestion && currentQuestion && ( // Uncommented N8nWebhookInput rendering
           <N8nWebhookInput
             n8nWebhookUrl={n8nWebhookUrl}
             onN8nWebhookUrlChange={handleN8nWebhookUrlChange}
             isSubmitting={isSubmitting}
             isValidHttpUrl={isValidHttpUrl}
           />
-        )} */}
+        )}
       </CardContent>
       <CardFooter className="flex justify-between p-6">
         <QuestionNavigation
@@ -143,4 +156,3 @@ export const Questionnaire: React.FC = () => {
     </Card>
   );
 };
-

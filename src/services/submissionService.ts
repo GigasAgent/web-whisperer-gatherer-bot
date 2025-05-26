@@ -1,7 +1,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { Answers } from '@/types/questionnaireTypes';
-// import { Profile } from '@/contexts/AuthContext'; // Commented out as it's only used by n8n webhook
+import { Profile } from '@/contexts/AuthContext'; // Uncommented
 
 interface SupabaseSubmissionResult {
   data?: { id: string | number } | null;
@@ -9,22 +9,24 @@ interface SupabaseSubmissionResult {
   newProjectId?: string | number | null;
 }
 
-// interface N8nWebhookPayload { // Commented out
-//   userId: string;
-//   userEmail?: string;
-//   userFullName?: string | null;
-//   submissionTimestamp: string;
-//   projectRequirements: Answers;
-//   supabaseProjectId?: string | number | null;
-// }
+// Uncommented N8nWebhookPayload interface
+interface N8nWebhookPayload {
+  userId: string;
+  userEmail?: string;
+  userFullName?: string | null;
+  submissionTimestamp: string;
+  projectRequirements: Answers;
+  supabaseProjectId?: string | number | null;
+}
 
-// interface N8nWebhookResult { // Commented out
-//   success: boolean;
-//   responseData?: any;
-//   errorText?: string;
-//   status?: number;
-//   statusText?: string;
-// }
+// Uncommented N8nWebhookResult interface
+interface N8nWebhookResult {
+  success: boolean;
+  responseData?: any;
+  errorText?: string;
+  status?: number;
+  statusText?: string;
+}
 
 export const submitToSupabase = async (
   userId: string,
@@ -53,7 +55,7 @@ export const submitToSupabase = async (
   }
 };
 
-/* // Commenting out the entire n8n webhook call function
+// Uncommented the entire n8n webhook call function
 export const callN8nWebhook = async (
   webhookUrl: string,
   userId: string,
@@ -83,7 +85,7 @@ export const callN8nWebhook = async (
     });
 
     if (response.ok) {
-      const responseData = await response.json().catch(() => ({}));
+      const responseData = await response.json().catch(() => ({})); // Gracefully handle non-JSON or empty responses
       console.log("Successfully sent data to n8n webhook:", responseData);
       return { success: true, responseData };
     } else {
@@ -96,5 +98,3 @@ export const callN8nWebhook = async (
     return { success: false, errorText: e.message ? e.message : 'Unknown error' };
   }
 };
-*/
-
