@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -54,7 +55,7 @@ const ProjectOutputPage: React.FC = () => {
     );
   }
 
-  const webhookUrl = "http://localhost:5678/webhook-test/1dfc5ecb-6b36-4fa6-a0ba-d62b03acc99b";
+  const webhookUrl = "http://localhost:5678/webhook/1dfc5ecb-6b36-4fa6-a0ba-d62b03acc99b";
 
   const { data: webhookResponse, isLoading, isError, error } = useQuery({
     queryKey: ['webhookData', webhookUrl],
