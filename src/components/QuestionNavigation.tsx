@@ -23,7 +23,7 @@ export const QuestionNavigation: React.FC<QuestionNavigationProps> = ({
   disableSubmit,
 }) => {
   return (
-    <div className="flex justify-between p-6">
+    <div className="flex w-full justify-between"> {/* Changed: Added w-full and removed p-6 */}
       <Button
         variant="outline"
         onClick={onPrev}
@@ -53,3 +53,4 @@ export const QuestionNavigation: React.FC<QuestionNavigationProps> = ({
     </div>
   );
 };
+
