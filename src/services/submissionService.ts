@@ -1,7 +1,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { Answers } from '@/types/questionnaireTypes';
-import { Profile } from '@/contexts/AuthContext'; // Assuming Profile type is exported from AuthContext
+// import { Profile } from '@/contexts/AuthContext'; // Commented out as it's only used by n8n webhook
 
 interface SupabaseSubmissionResult {
   data?: { id: string | number } | null;
@@ -9,22 +9,22 @@ interface SupabaseSubmissionResult {
   newProjectId?: string | number | null;
 }
 
-interface N8nWebhookPayload {
-  userId: string;
-  userEmail?: string;
-  userFullName?: string | null;
-  submissionTimestamp: string;
-  projectRequirements: Answers;
-  supabaseProjectId?: string | number | null;
-}
+// interface N8nWebhookPayload { // Commented out
+//   userId: string;
+//   userEmail?: string;
+//   userFullName?: string | null;
+//   submissionTimestamp: string;
+//   projectRequirements: Answers;
+//   supabaseProjectId?: string | number | null;
+// }
 
-interface N8nWebhookResult {
-  success: boolean;
-  responseData?: any;
-  errorText?: string;
-  status?: number;
-  statusText?: string;
-}
+// interface N8nWebhookResult { // Commented out
+//   success: boolean;
+//   responseData?: any;
+//   errorText?: string;
+//   status?: number;
+//   statusText?: string;
+// }
 
 export const submitToSupabase = async (
   userId: string,
@@ -53,6 +53,7 @@ export const submitToSupabase = async (
   }
 };
 
+/* // Commenting out the entire n8n webhook call function
 export const callN8nWebhook = async (
   webhookUrl: string,
   userId: string,
@@ -95,3 +96,5 @@ export const callN8nWebhook = async (
     return { success: false, errorText: e.message ? e.message : 'Unknown error' };
   }
 };
+*/
+
