@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,15 +9,15 @@ import { questions } from '@/data/questions';
 
 import { useQuestionnaire } from '@/hooks/useQuestionnaire';
 import { QuestionDisplay } from './QuestionDisplay';
-import { N8nWebhookInput } from './N8nWebhookInput'; // Uncommented
+import { N8nWebhookInput } from './N8nWebhookInput';
 import { QuestionNavigation } from './QuestionNavigation';
-import { submitToSupabase, callN8nWebhook } from '@/services/submissionService'; // Added callN8nWebhook
+import { submitToSupabase, callN8nWebhook } from '@/services/submissionService';
 
 export const Questionnaire: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile, loading: authLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState(''); // Uncommented
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
 
   const {
     currentQuestionIndex,
@@ -32,26 +31,25 @@ export const Questionnaire: React.FC = () => {
     getFinalAnswers,
   } = useQuestionnaire();
 
-  useEffect(() => { // Uncommented n8n webhook URL loading
+  useEffect(() => {
     const storedWebhookUrl = localStorage.getItem('n8nWebhookUrl');
     if (storedWebhookUrl) {
       setN8nWebhookUrl(storedWebhookUrl);
     }
   }, []);
 
-  const handleN8nWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => { // Uncommented
+  const handleN8nWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setN8nWebhookUrl(e.target.value);
     localStorage.setItem('n8nWebhookUrl', e.target.value);
   };
-  
-  const isValidHttpUrl = (string: string) => { // Uncommented
+
+  const isValidHttpUrl = (string: string) => {
     let url;
     try {
       url = new URL(string);
     } catch (_) {
       return false;
     }
-    // Allow http, https, and common n8n webhook protocols like https+.*
     return url.protocol === "http:" || url.protocol === "https:" || (typeof url.protocol === 'string' && url.protocol.startsWith("https+"));
   };
 
@@ -61,7 +59,7 @@ export const Questionnaire: React.FC = () => {
       return;
     }
 
-    if (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)) { // Added n8n validation
+    if (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)) {
       toast({ title: "Invalid Webhook URL", description: "Please enter a valid HTTP/HTTPS URL for n8n webhook.", variant: "destructive" });
       return;
     }
@@ -102,7 +100,6 @@ export const Questionnaire: React.FC = () => {
     setIsSubmitting(false);
   };
 
-
   if (authLoading) {
     return (
       <Card className="w-full max-w-2xl bg-card shadow-xl shadow-neon-green/30 border border-neon-green/50 flex items-center justify-center p-10">
@@ -111,10 +108,10 @@ export const Questionnaire: React.FC = () => {
     );
   }
 
-  const disableSubmitButton = !user || (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl)); // Updated disable logic
+  const disableSubmitButton = !user || (n8nWebhookUrl.trim() && !isValidHttpUrl(n8nWebhookUrl));
 
   return (
-    <Card className="w-full max-w-2xl bg-card shadow-xl shadow-neon-green/30 border border-neon-green/50">
+    <Card className="w-full max-w-2xl bg-card shadow-xl shadow-neon-green/30 border border-neon-green/50 h-fit">
       <CardHeader>
         <CardTitle className="text-2xl font-bold glowing-text text-center">
           Project Requirements
@@ -124,22 +121,26 @@ export const Questionnaire: React.FC = () => {
           Question {currentQuestionIndex + 1} of {questions.length}
         </p>
       </CardHeader>
-      <CardContent className="space-y-6 p-6">
-        {currentQuestion && (
-          <QuestionDisplay
-            question={currentQuestion}
-            currentAnswer={currentAnswer}
-            onInputChange={handleInputChange}
-            isSubmitting={isSubmitting}
-          />
-        )}
-        {isLastQuestion && currentQuestion && ( // Uncommented N8nWebhookInput rendering
-          <N8nWebhookInput
-            n8nWebhookUrl={n8nWebhookUrl}
-            onN8nWebhookUrlChange={handleN8nWebhookUrlChange}
-            isSubmitting={isSubmitting}
-            isValidHttpUrl={isValidHttpUrl}
-          />
+      <CardContent className="min-h-[380px] flex flex-col justify-between p-6">
+        <div className="flex-grow">
+          {currentQuestion && (
+            <QuestionDisplay
+              question={currentQuestion}
+              currentAnswer={currentAnswer}
+              onInputChange={handleInputChange}
+              isSubmitting={isSubmitting}
+            />
+          )}
+        </div>
+        {isLastQuestion && currentQuestion && (
+          <div className="mt-auto">
+            <N8nWebhookInput
+              n8nWebhookUrl={n8nWebhookUrl}
+              onN8nWebhookUrlChange={handleN8nWebhookUrlChange}
+              isSubmitting={isSubmitting}
+              isValidHttpUrl={isValidHttpUrl}
+            />
+          </div>
         )}
       </CardContent>
       <CardFooter className="flex justify-between p-6">
